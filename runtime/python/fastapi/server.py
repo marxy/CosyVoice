@@ -81,6 +81,21 @@ async def inference_instruct2(tts_text: str = Form(), instruct_text: str = Form(
     return StreamingResponse(generate_data(model_output))
 
 
+def unknown_args_to_kwargs(unknown_args):
+    kwargs = {}
+    key = None
+    for arg in unknown_args:
+        if arg.startswith('--'):
+            key = arg.lstrip('--').replace('-', '_')
+            kwargs[key] = True   # 默认当作 flag
+        else:
+            if key is None:
+                raise ValueError(f"孤立参数: {arg}")
+            kwargs[key] = arg
+            key = None
+    return kwargs
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port',
@@ -90,6 +105,11 @@ if __name__ == '__main__':
                         type=str,
                         default='iic/CosyVoice2-0.5B',
                         help='local path or modelscope repo id')
-    args = parser.parse_args()
-    cosyvoice = AutoModel(model_dir=args.model_dir)
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    parser.add_argument('--log_level',
+                        type=str,
+                        default='debug',
+                        help='local logging level')
+    args, unknown_args = parser.parse_known_args()
+    extra_kwargs = unknown_args_to_kwargs(unknown_args)
+    cosyvoice = AutoModel(model_dir=args.model_dir, **extra_kwargs)
+    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level=args.log_level)

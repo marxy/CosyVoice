@@ -32,8 +32,8 @@ logging.basicConfig(level=logging.DEBUG,
 
 
 class CosyVoiceServiceImpl(cosyvoice_pb2_grpc.CosyVoiceServicer):
-    def __init__(self, args):
-        self.cosyvoice = AutoModel(model_dir=args.model_dir)
+    def __init__(self, args, **kwargs):
+        self.cosyvoice = AutoModel(model_dir=args.model_dir, **kwargs)
         logging.info('grpc service initialized')
 
     def Inference(self, request, context):
@@ -67,11 +67,26 @@ class CosyVoiceServiceImpl(cosyvoice_pb2_grpc.CosyVoiceServicer):
 
 def main():
     grpcServer = grpc.server(futures.ThreadPoolExecutor(max_workers=args.max_conc), maximum_concurrent_rpcs=args.max_conc)
-    cosyvoice_pb2_grpc.add_CosyVoiceServicer_to_server(CosyVoiceServiceImpl(args), grpcServer)
+    cosyvoice_pb2_grpc.add_CosyVoiceServicer_to_server(CosyVoiceServiceImpl(args, **extra_kwargs), grpcServer)
     grpcServer.add_insecure_port('0.0.0.0:{}'.format(args.port))
     grpcServer.start()
     logging.info("server listening on 0.0.0.0:{}".format(args.port))
     grpcServer.wait_for_termination()
+
+
+def unknown_args_to_kwargs(unknown_args):
+    kwargs = {}
+    key = None
+    for arg in unknown_args:
+        if arg.startswith('--'):
+            key = arg.lstrip('--').replace('-', '_')
+            kwargs[key] = True   # 默认当作 flag
+        else:
+            if key is None:
+                raise ValueError(f"孤立参数: {arg}")
+            kwargs[key] = arg
+            key = None
+    return kwargs
 
 
 if __name__ == '__main__':
@@ -86,5 +101,6 @@ if __name__ == '__main__':
                         type=str,
                         default='iic/CosyVoice2-0.5B',
                         help='local path or modelscope repo id')
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    extra_kwargs = unknown_args_to_kwargs(unknown_args)
     main()
