@@ -76,17 +76,55 @@ def main():
 
 def unknown_args_to_kwargs(unknown_args):
     kwargs = {}
-    key = None
-    for arg in unknown_args:
-        if arg.startswith('--'):
-            key = arg.lstrip('--').replace('-', '_')
-            kwargs[key] = True   # 默认当作 flag
+    i = 0
+    while i < len(unknown_args):
+        arg = unknown_args[i]
+
+        # 情况1: --key=value 形式
+        if arg.startswith('--') and '=' in arg:
+            key, value = arg[2:].split('=', 1)
+            key = key.replace('-', '_')
+            kwargs[key] = _auto_convert(value)
+            i += 1
+
+        # 情况2: --key value 形式（flag 或带值）
+        elif arg.startswith('--'):
+            key = arg[2:].replace('-', '_')
+            # 查看下一个参数是否存在且不是新 key
+            if i + 1 < len(unknown_args) and not unknown_args[i + 1].startswith('--'):
+                value = unknown_args[i + 1]
+                kwargs[key] = _auto_convert(value)
+                i += 2  # 消耗两个参数
+            else:
+                # 无后续值 → 当作 flag（True）
+                kwargs[key] = True
+                i += 1
+
         else:
-            if key is None:
-                raise ValueError(f"孤立参数: {arg}")
-            kwargs[key] = arg
-            key = None
+            raise ValueError(f"孤立参数（不在 --key 后）: {arg}")
+
     return kwargs
+
+
+def _auto_convert(s):
+    """尝试将字符串自动转为 int/float/bool，失败则保留 str"""
+    s = s.strip()
+    # 先试 bool（避免 '1' 被转成 True）
+    if s.lower() in ('true', 'false'):
+        return s.lower() == 'true'
+    # 再试 int
+    try:
+        if '.' not in s and 'e' not in s.lower():
+            return int(s)
+    except ValueError:
+        pass
+    # 再试 float
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    # 否则保留字符串
+    return s
 
 
 if __name__ == '__main__':
